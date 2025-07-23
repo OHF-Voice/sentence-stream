@@ -10,9 +10,11 @@ SENTENCE_END = r"[.!?…]|[。！？]|[؟]|[।॥]"
 ABBREVIATION_RE = re.compile(r"\b\p{L}{1,3}\.$", re.UNICODE)
 
 SENTENCE_BOUNDARY_RE = re.compile(
-    rf"(.*?(?:{SENTENCE_END}+))(?=\s+[\p{{Lu}}\p{{Lt}}\p{{Lo}}]|(?:\s+\d+\.\s+))",
+    # rf"(.*?(?:{SENTENCE_END}+))(?=\s+[\p{{Lu}}\p{{Lt}}\p{{Lo}}]|(?:\s+\d+\.\s+))",
+    rf"(?:{SENTENCE_END}+)(?=\s+[\p{{Lu}}\p{{Lt}}\p{{Lo}}]|(?:\s+\d+\.\s+))",
     re.DOTALL,
 )
+BLANK_LINES_RE = re.compile(r"(?:\r?\n){2,}")
 
 
 # -----------------------------------------------------------------------------
@@ -59,11 +61,22 @@ class SentenceBoundaryDetector:
         """Add text chunk to stream and yield all detected sentences."""
         self.remaining_text += chunk
         while self.remaining_text:
-            match = SENTENCE_BOUNDARY_RE.search(self.remaining_text)
-            if not match:
+            match_blank_lines = BLANK_LINES_RE.search(self.remaining_text)
+            match_punctuation = SENTENCE_BOUNDARY_RE.search(self.remaining_text)
+            if match_blank_lines and match_punctuation:
+                if match_blank_lines.start() < match_punctuation.start():
+                    first_match = match_blank_lines
+                else:
+                    first_match = match_punctuation
+            elif match_blank_lines:
+                first_match = match_blank_lines
+            elif match_punctuation:
+                first_match = match_punctuation
+            else:
                 break
 
-            match_text = match.group(0)
+            match_text = self.remaining_text[: first_match.start() + 1]
+            match_end = first_match.end()
 
             if not self.current_sentence:
                 self.current_sentence = match_text
@@ -77,7 +90,7 @@ class SentenceBoundaryDetector:
                 yield remove_asterisks(self.current_sentence.strip())
                 self.current_sentence = ""
 
-            self.remaining_text = self.remaining_text[match.end() :]
+            self.remaining_text = self.remaining_text[match_end:]
 
     def finish(self) -> str:
         """End text stream and yield final sentence."""

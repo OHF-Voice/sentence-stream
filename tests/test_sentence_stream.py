@@ -73,3 +73,39 @@ def test_numbered_lists() -> None:
     )
     assert len(sentences) == 10
     assert sentences[1].startswith("2. Aerith Gainsborough")
+
+
+@pytest.mark.asyncio
+async def test_blank_line() -> None:
+    """Test that a double newline splits a sentence."""
+    text_1 = "Test sentence 1"
+    text_2 = "Test sentence 2."
+    text_3 = "Test sentence 3"
+    text = f"{text_1}\n\n{text_2} {text_3}"
+    assert list(stream_to_sentences([text])) == [text_1, text_2, text_3]
+
+    async def text_gen():
+        yield text
+
+    assert [sent async for sent in async_stream_to_sentences(text_gen())] == [
+        text_1,
+        text_2,
+        text_3,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_newline_punctuation() -> None:
+    """Test that a newline with punctuation splits a sentence."""
+    text_1 = "Test sentence 1."
+    text_2 = "Test sentence 2."
+    text = f"{text_1}\n{text_2}"
+    assert list(stream_to_sentences([text])) == [text_1, text_2]
+
+    async def text_gen():
+        yield text
+
+    assert [sent async for sent in async_stream_to_sentences(text_gen())] == [
+        text_1,
+        text_2,
+    ]
