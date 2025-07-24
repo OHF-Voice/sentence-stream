@@ -1,8 +1,12 @@
 """Tests for sentence boundary detection."""
 
+from typing import List
+
 import pytest
 
 from sentence_stream import async_stream_to_sentences, stream_to_sentences
+
+from .english_golden_rules import GOLDEN_EN_RULES
 
 
 @pytest.mark.asyncio
@@ -109,3 +113,16 @@ async def test_newline_punctuation() -> None:
         text_1,
         text_2,
     ]
+
+
+@pytest.mark.parametrize(("should_pass", "text", "expected_sentences"), GOLDEN_EN_RULES)
+def test_golden_rules_en(
+    should_pass: bool, text: str, expected_sentences: List[str]
+) -> None:
+    """Test English 'golden rules'."""
+    actual_sentences = list(stream_to_sentences(text))
+    if should_pass:
+        assert expected_sentences == actual_sentences
+    else:
+        # Expected to fail
+        assert expected_sentences != actual_sentences, "Expected to fail but succeeded"
