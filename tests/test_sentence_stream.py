@@ -120,9 +120,21 @@ def test_golden_rules_en(
     should_pass: bool, text: str, expected_sentences: List[str]
 ) -> None:
     """Test English 'golden rules'."""
-    actual_sentences = list(stream_to_sentences(text))
+    actual_sentences = list(stream_to_sentences([text]))
     if should_pass:
         assert expected_sentences == actual_sentences
     else:
         # Expected to fail
         assert expected_sentences != actual_sentences, "Expected to fail but succeeded"
+
+
+def test_short_word_at_boundary() -> None:
+    """Test that a short word like 'say' doesn't get misinterpreted as an abbreviation."""
+    sentences = list(
+        stream_to_sentences(
+            [
+                "This is a short message. This is a slightly longer message that takes longer to say. This is an even longer message where I'm going to keep talking for awhile."
+            ]
+        )
+    )
+    assert len(sentences) == 3

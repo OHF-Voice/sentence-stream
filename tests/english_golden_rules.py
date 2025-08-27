@@ -30,7 +30,7 @@ GOLDEN_EN_RULES = [
     ),
     # 8) Two letter lower case abbreviations at the end of a sentence
     (
-        False,
+        True,
         "Let's ask Jane and co. They should know.",
         ["Let's ask Jane and co.", "They should know."],
     ),
@@ -105,7 +105,7 @@ GOLDEN_EN_RULES = [
     ),
     # 22) Email addresses
     (
-        False,
+        True,
         "Her email is Jane.Doe@example.com. I sent her an email.",
         ["Her email is Jane.Doe@example.com.", "I sent her an email."],
     ),
