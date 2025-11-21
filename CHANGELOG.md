@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add py.typed file
+
 ## 1.2.1
 
 - Relax regex version
