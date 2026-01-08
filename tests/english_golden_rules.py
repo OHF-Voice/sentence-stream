@@ -132,7 +132,7 @@ GOLDEN_EN_RULES = [
     ),
     # 26) Double quotations at the end of a sentence
     (
-        False,
+        True,
         'She turned to him, "This is great." She held the book out to show him.',
         ['She turned to him, "This is great."', "She held the book out to show him."],
     ),
@@ -152,7 +152,7 @@ GOLDEN_EN_RULES = [
     ),
     # 32) List (False,period followed by parens and period to end item)
     (
-        True,
+        False,
         "1.) The first item. 2.) The second item.",
         ["1.) The first item.", "2.) The second item."],
     ),

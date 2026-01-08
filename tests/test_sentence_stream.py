@@ -144,3 +144,18 @@ def test_chinese() -> None:
     """Test that Chinese punctuation (with quotes) work."""
     text = "“这是第一句话。”这是第二句话。"
     assert list(stream_to_sentences([text])) == ["“这是第一句话。”", "这是第二句话。"]
+
+    # Test quotes
+    text_chunks = ["“这是第一句", "话。", "”这是第二句话。"]
+    assert list(stream_to_sentences(text_chunks)) == [
+        "“这是第一句话。”",
+        "这是第二句话。",
+    ]
+
+
+def test_quotes() -> None:
+    text_chunks = ['"First test sentence', ".", '"', " Second test sentence."]
+    assert list(stream_to_sentences(text_chunks)) == [
+        '"First test sentence."',
+        "Second test sentence.",
+    ]
