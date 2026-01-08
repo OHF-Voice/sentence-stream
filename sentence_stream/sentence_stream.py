@@ -6,13 +6,15 @@ import regex as re
 
 from .util import remove_asterisks
 
-SENTENCE_END = r"[.!?…]|[。！？]|[؟]|[।॥]"
+SENTENCE_END = r"[.!?…]|[؟]|[।॥]"
 ABBREVIATION_RE = re.compile(r"\b\p{Lu}(?:\p{L}{1,2})?\.$", re.UNICODE)
 
 SENTENCE_BOUNDARY_RE = re.compile(
     rf"(?:{SENTENCE_END}+)(?=\s+[\p{{Lu}}\p{{Lt}}\p{{Lo}}]|(?:\s+\d+[.)]{{1,2}}\s+))",
     re.DOTALL,
 )
+ZH_CLOSERS = r"""[”’」』）》】〕〉】）〕】]*"""
+SENTENCE_BOUNDARY_ZH_RE = re.compile(rf"(?:[。！？]|……|…)+{ZH_CLOSERS}")
 BLANK_LINES_RE = re.compile(r"(?:\r?\n){2,}")
 
 
@@ -61,7 +63,10 @@ class SentenceBoundaryDetector:
         self.remaining_text += chunk
         while self.remaining_text:
             match_blank_lines = BLANK_LINES_RE.search(self.remaining_text)
-            match_punctuation = SENTENCE_BOUNDARY_RE.search(self.remaining_text)
+            match_punctuation = SENTENCE_BOUNDARY_ZH_RE.search(
+                self.remaining_text
+            ) or SENTENCE_BOUNDARY_RE.search(self.remaining_text)
+
             if match_blank_lines and match_punctuation:
                 if match_blank_lines.start() < match_punctuation.start():
                     first_match = match_blank_lines
@@ -74,8 +79,11 @@ class SentenceBoundaryDetector:
             else:
                 break
 
-            match_text = self.remaining_text[: first_match.start() + 1]
+            # match_text = self.remaining_text[: first_match.start() + 1]
+            # match_end = first_match.end()
+            match_text = self.remaining_text[: first_match.end()]
             match_end = first_match.end()
+
 
             if not self.current_sentence:
                 if ABBREVIATION_RE.search(match_text[-5:]):

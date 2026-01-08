@@ -138,3 +138,9 @@ def test_short_word_at_boundary() -> None:
         )
     )
     assert len(sentences) == 3
+
+
+def test_chinese() -> None:
+    """Test that Chinese punctuation (with quotes) work."""
+    text = "“这是第一句话。”这是第二句话。"
+    assert list(stream_to_sentences([text])) == ["“这是第一句话。”", "这是第二句话。"]
