@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
 
+- Handle Chinese punctuation (without whitespace)
+- Handle punctuation inside quotes
 - Add py.typed file
 
 ## 1.2.1
