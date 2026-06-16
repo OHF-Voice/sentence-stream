@@ -40,9 +40,9 @@ GOLDEN_EN_RULES = [
         "They closed the deal with Pitt, Briggs & Co. It closed yesterday.",
         ["They closed the deal with Pitt, Briggs & Co.", "It closed yesterday."],
     ),
-    # 10) Two letter (False,prepositive) abbreviations
+    # 10) Two letter (prepositive) abbreviations
     (True, "I can see Mt. Fuji from here.", ["I can see Mt. Fuji from here."]),
-    # 11) Two letter (False,prepositive & postpositive) abbreviations
+    # 11) Two letter (prepositive & postpositive) abbreviations
     (
         True,
         "St. Michael's Church is on 5th st. near the light.",
@@ -98,9 +98,9 @@ GOLDEN_EN_RULES = [
     # 21) Parenthetical inside sentence
     (
         True,
-        "He teaches science (False,He previously worked for 5 years as an engineer.) at the local University.",
+        "He teaches science (He previously worked for 5 years as an engineer.) at the local University.",
         [
-            "He teaches science (False,He previously worked for 5 years as an engineer.) at the local University."
+            "He teaches science (He previously worked for 5 years as an engineer.) at the local University."
         ],
     ),
     # 22) Email addresses
@@ -136,45 +136,45 @@ GOLDEN_EN_RULES = [
         'She turned to him, "This is great." She held the book out to show him.',
         ['She turned to him, "This is great."', "She held the book out to show him."],
     ),
-    # 27) Double punctuation (False,exclamation point)
+    # 27) Double punctuation (exclamation point)
     (True, "Hello!! Long time no see.", ["Hello!!", "Long time no see."]),
-    # 28) Double punctuation (False,question mark)
+    # 28) Double punctuation (question mark)
     (True, "Hello?? Who is there?", ["Hello??", "Who is there?"]),
-    # 29) Double punctuation (False,exclamation point / question mark)
+    # 29) Double punctuation (exclamation point / question mark)
     (True, "Hello!? Is that you?", ["Hello!?", "Is that you?"]),
-    # 30) Double punctuation (False,question mark / exclamation point)
+    # 30) Double punctuation (question mark / exclamation point)
     (True, "Hello?! Is that you?", ["Hello?!", "Is that you?"]),
-    # 31) List (False,period followed by parens and no period to end item)
+    # 31) List (period followed by parens and no period to end item)
     (
         False,
         "1.) The first item 2.) The second item",
         ["1.) The first item", "2.) The second item"],
     ),
-    # 32) List (False,period followed by parens and period to end item)
+    # 32) List (period followed by parens and period to end item)
     (
         False,
         "1.) The first item. 2.) The second item.",
         ["1.) The first item.", "2.) The second item."],
     ),
-    # 33) List (False,parens and no period to end item)
+    # 33) List (parens and no period to end item)
     (
         False,
         "1) The first item 2) The second item",
         ["1) The first item", "2) The second item"],
     ),
-    # 34) List (False,parens and period to end item)
+    # 34) List (parens and period to end item)
     (
         True,
         "1) The first item. 2) The second item.",
         ["1) The first item.", "2) The second item."],
     ),
-    # 35) List (False,period to mark list and no period to end item)
+    # 35) List (period to mark list and no period to end item)
     (
         False,
         "1. The first item 2. The second item",
         ["1. The first item", "2. The second item"],
     ),
-    # 36) List (False,period to mark list and period to end item)
+    # 36) List (period to mark list and period to end item)
     (
         False,
         "1. The first item. 2. The second item.",
@@ -227,19 +227,19 @@ GOLDEN_EN_RULES = [
     # 44) Ellipsis with square brackets
     (
         True,
-        """"Bohr [...] used the analogy of parallel stairways [...]" (False,Smith 55).""",
-        ['"Bohr [...] used the analogy of parallel stairways [...]" (False,Smith 55).'],
+        """"Bohr [...] used the analogy of parallel stairways [...]" (Smith 55).""",
+        ['"Bohr [...] used the analogy of parallel stairways [...]" (Smith 55).'],
     ),
-    # 45) Ellipsis as sentence boundary (False,standard ellipsis rules)
+    # 45) Ellipsis as sentence boundary (standard ellipsis rules)
     (
         True,
-        "If words are left off at the end of a sentence, and that is all that is omitted, indicate the omission with ellipsis marks (False,preceded and followed by a space) and then indicate the end of the sentence with a period . . . . Next sentence.",
+        "If words are left off at the end of a sentence, and that is all that is omitted, indicate the omission with ellipsis marks (preceded and followed by a space) and then indicate the end of the sentence with a period . . . . Next sentence.",
         [
-            "If words are left off at the end of a sentence, and that is all that is omitted, indicate the omission with ellipsis marks (False,preceded and followed by a space) and then indicate the end of the sentence with a period . . . .",
+            "If words are left off at the end of a sentence, and that is all that is omitted, indicate the omission with ellipsis marks (preceded and followed by a space) and then indicate the end of the sentence with a period . . . .",
             "Next sentence.",
         ],
     ),
-    # 46) Ellipsis as sentence boundary (False,non-standard ellipsis rules)
+    # 46) Ellipsis as sentence boundary (non-standard ellipsis rules)
     (
         True,
         "I never meant that.... She left the store.",

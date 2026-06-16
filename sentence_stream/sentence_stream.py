@@ -68,11 +68,33 @@ class SentenceBoundaryDetector:
     def add_chunk(self, chunk: str) -> Iterable[str]:
         """Add text chunk to stream and yield all detected sentences."""
         self.remaining_text += chunk
+        text = self.remaining_text
+        text_len = len(text)
 
-        while self.remaining_text:
-            match_blank_lines = BLANK_LINES_RE.search(self.remaining_text)
-            match_punctuation_zh = SENTENCE_BOUNDARY_ZH_RE.search(self.remaining_text)
-            match_punctuation_ascii = SENTENCE_BOUNDARY_RE.search(self.remaining_text)
+        # Walk the buffer with a cursor instead of re-slicing it every
+        # iteration, and cache each pattern's next match so we don't rescan the
+        # whole buffer for every boundary. Once a pattern returns None there is
+        # no further match in this buffer, so it is never searched again.
+        consumed = 0
+        match_blank_lines = BLANK_LINES_RE.search(text, consumed)
+        match_punctuation_zh = SENTENCE_BOUNDARY_ZH_RE.search(text, consumed)
+        match_punctuation_ascii = SENTENCE_BOUNDARY_RE.search(text, consumed)
+
+        while consumed < text_len:
+            # Refresh a cached match only when the cursor has advanced past it;
+            # an as-yet-unconsumed match is still the earliest one.
+            if match_blank_lines is not None and match_blank_lines.start() < consumed:
+                match_blank_lines = BLANK_LINES_RE.search(text, consumed)
+            if (
+                match_punctuation_zh is not None
+                and match_punctuation_zh.start() < consumed
+            ):
+                match_punctuation_zh = SENTENCE_BOUNDARY_ZH_RE.search(text, consumed)
+            if (
+                match_punctuation_ascii is not None
+                and match_punctuation_ascii.start() < consumed
+            ):
+                match_punctuation_ascii = SENTENCE_BOUNDARY_RE.search(text, consumed)
 
             # Choose earliest punctuation (Chinese vs ASCII)
             if match_punctuation_zh and match_punctuation_ascii:
@@ -100,26 +122,22 @@ class SentenceBoundaryDetector:
             # If this is a Chinese sentence boundary *at the end of the buffer*,
             # do not consume it yet. Wait for the next chunk so we can pick up
             # any following closers (e.g., ”, 》, ）) and following text.
-            if first_match is match_punctuation_zh and first_match.end() == len(
-                self.remaining_text
-            ):
+            if first_match is match_punctuation_zh and first_match.end() == text_len:
                 break
 
             match_end = first_match.end()
-            match_text = self.remaining_text[:match_end]
+            match_text = text[consumed:match_end]
 
-            if not self.current_sentence:
-                if ABBREVIATION_RE.search(match_text[-5:]):
-                    # We can't know yet if this is a sentence boundary or an abbreviation
-                    self.current_sentence = match_text
-                elif output_text := remove_asterisks(match_text.strip()):
-                    yield output_text
-            elif ABBREVIATION_RE.search(self.current_sentence[-5:]):
+            if self.current_sentence:
+                # Invariant: when current_sentence is non-empty here it always
+                # ends in a possible abbreviation, so keep accumulating until
+                # the flush check below proves otherwise.
                 self.current_sentence += match_text
-            else:
-                if output_text := remove_asterisks(self.current_sentence.strip()):
-                    yield output_text
+            elif ABBREVIATION_RE.search(match_text[-5:]):
+                # We can't know yet if this is a sentence boundary or an abbreviation
                 self.current_sentence = match_text
+            elif output_text := remove_asterisks(match_text.strip()):
+                yield output_text
 
             # If the current sentence no longer looks like an abbreviation, flush it.
             if self.current_sentence and not ABBREVIATION_RE.search(
@@ -129,7 +147,9 @@ class SentenceBoundaryDetector:
                     yield output_text
                 self.current_sentence = ""
 
-            self.remaining_text = self.remaining_text[match_end:]
+            consumed = match_end
+
+        self.remaining_text = text[consumed:]
 
     def finish(self) -> str:
         """End text stream and yield final sentence."""
