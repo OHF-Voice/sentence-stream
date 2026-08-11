@@ -130,6 +130,93 @@ def test_detector_reusable_after_finish() -> None:
     assert second == ["Three.", "Four"]
 
 
+def test_add_chunk_is_eager() -> None:
+    """add_chunk must apply the chunk even if the caller ignores the result.
+
+    As a generator its body never ran until iterated, so discarding the return
+    value silently dropped the chunk.
+    """
+    detector = SentenceBoundaryDetector()
+    detector.add_chunk("Hello world. Goodbye world.")  # result deliberately unused
+    assert detector.finish() == "Goodbye world."
+
+
+def test_add_chunk_returns_a_concrete_sequence() -> None:
+    """add_chunk returns a real sequence, not a lazy iterator."""
+    detector = SentenceBoundaryDetector()
+    result = detector.add_chunk("One sentence here. Two sentences here.")
+    assert isinstance(result, list)
+    # Re-iterable, unlike a generator.
+    assert list(result) == list(result) == ["One sentence here."]
+
+
+def test_partial_consumption_does_not_duplicate() -> None:
+    """Abandoning the returned sentences must not corrupt the buffer.
+
+    While add_chunk was a generator, breaking out of the loop skipped the final
+    buffer update, so already-emitted text was emitted again by finish().
+    """
+    detector = SentenceBoundaryDetector()
+    for sentence in detector.add_chunk("Alpha beta. Gamma delta. Epsilon zeta."):
+        assert sentence == "Alpha beta."
+        break
+    assert detector.finish() == "Epsilon zeta."
+
+
+def test_consumer_exception_does_not_duplicate() -> None:
+    """An exception while handling sentences must not corrupt the buffer."""
+    detector = SentenceBoundaryDetector()
+    with pytest.raises(RuntimeError):
+        for _sentence in detector.add_chunk("Alpha beta. Gamma delta. Epsilon zeta."):
+            raise RuntimeError("consumer failed")
+    assert detector.finish() == "Epsilon zeta."
+
+
+def test_boundary_free_stream_is_linear() -> None:
+    """Streaming text with no boundaries must not be quadratic in buffer length.
+
+    Every chunk used to restart all three searches at position 0 of the whole
+    accumulated buffer, so a boundary-free stream cost O(n^2): this input took
+    over a second. Thai and Lao hit it unconditionally, having no sentence
+    terminator for the buffer to drain on.
+    """
+    chunks = _chunks("word " * 8000, 8)  # 40k chars, no boundary anywhere
+    start = time.perf_counter()
+    sentences = list(stream_to_sentences(chunks))
+    elapsed = time.perf_counter() - start
+
+    assert sentences == [("word " * 8000).strip()]
+    assert elapsed < 1.0, f"took {elapsed:.3f}s; possible quadratic regression"
+
+
+def test_settled_text_is_reassembled() -> None:
+    """A sentence longer than one chunk is rejoined from the settled buffer.
+
+    Settled text is filed away from the search buffer as it accumulates, so the
+    join has to put it back in front of the sentence that completes it.
+    """
+    long_sentence = "word " * 2000 + "end."
+    text = long_sentence + " Next one."
+    assert list(stream_to_sentences(_chunks(text, 8))) == [
+        long_sentence,
+        "Next one.",
+    ]
+
+
+def test_lookbehind_survives_chunk_boundary() -> None:
+    """A Greek question mark still splits when its letter arrives in an earlier chunk.
+
+    The boundary is gated on a lookbehind, which fails if the preceding letter
+    has already been filed away from the search buffer.
+    """
+    text = "Τι κάνεις; Είμαι καλά."
+    for size in (1, 2, 3, 5):
+        assert list(stream_to_sentences(_chunks(text, size))) == [
+            "Τι κάνεις;",
+            "Είμαι καλά.",
+        ]
+
+
 def test_large_input_is_linear() -> None:
     """Many boundaries in a single chunk must process in roughly linear time.
 

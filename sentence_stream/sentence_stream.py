@@ -1,6 +1,7 @@
 """Guess the sentence boundaries in a text stream."""
 
 from collections.abc import AsyncGenerator, AsyncIterable, Generator, Iterable
+from typing import List
 
 import regex as re
 
@@ -68,6 +69,23 @@ SENTENCE_BOUNDARY_CJK_RE = re.compile(
 
 BLANK_LINES_RE = re.compile(r"(?:\r?\n){2,}")
 
+# Locates the trailing stretch of a buffer whose boundaries are not yet decided.
+# Every boundary pattern is built from punctuation, quotes, whitespace and digits,
+# so later text can only complete a match that begins inside a run of non-letters
+# -- which is the run after the final letter. Deliberately conservative:
+# over-matching only costs a little rescanning, under-matching drops a boundary.
+#
+# Searched in reverse so the cost is the length of that run rather than the
+# length of the buffer; scanning forwards for the run would reintroduce the very
+# per-chunk buffer walk this exists to avoid.
+LAST_LETTER_RE = re.compile(r"\p{L}", re.REVERSE)
+
+# How much settled text to keep in front of the undecided tail. A pattern with a
+# lookbehind -- the Greek question mark needs the letter before it -- would stop
+# matching if that character were filed away, so leave a margin. One character
+# covers every lookbehind used today; the rest is slack for the next one.
+LOOKBEHIND_CONTEXT = 8
+
 
 # -----------------------------------------------------------------------------
 
@@ -107,10 +125,17 @@ class SentenceBoundaryDetector:
 
     def __init__(self) -> None:
         self.remaining_text = ""
+        self.settled_text: List[str] = []
         self.current_sentence = ""
 
-    def add_chunk(self, chunk: str) -> Iterable[str]:
-        """Add text chunk to stream and yield all detected sentences."""
+    def add_chunk(self, chunk: str) -> List[str]:
+        """Add text chunk to stream and return all detected sentences.
+
+        This must not be a generator: callers who ignore the return value would
+        silently drop the chunk, and callers who stop iterating early would leave
+        the buffer holding text that had already been emitted.
+        """
+        sentences: List[str] = []
         self.remaining_text += chunk
         text = self.remaining_text
         text_len = len(text)
@@ -172,6 +197,13 @@ class SentenceBoundaryDetector:
             match_end = first_match.end()
             match_text = text[consumed:match_end]
 
+            if self.settled_text:
+                # Settled text precedes everything in this buffer, so it belongs
+                # at the front of the first sentence we complete. Only the first
+                # match in a buffer can claim it.
+                match_text = "".join(self.settled_text) + match_text
+                self.settled_text = []
+
             if self.current_sentence:
                 # Invariant: when current_sentence is non-empty here it always
                 # ends in a possible abbreviation, so keep accumulating until
@@ -181,23 +213,41 @@ class SentenceBoundaryDetector:
                 # We can't know yet if this is a sentence boundary or an abbreviation
                 self.current_sentence = match_text
             elif output_text := remove_asterisks(match_text.strip()):
-                yield output_text
+                sentences.append(output_text)
 
             # If the current sentence no longer looks like an abbreviation, flush it.
             if self.current_sentence and not ABBREVIATION_RE.search(
                 self.current_sentence[-5:]
             ):
                 if output_text := remove_asterisks(self.current_sentence.strip()):
-                    yield output_text
+                    sentences.append(output_text)
                 self.current_sentence = ""
 
             consumed = match_end
 
         self.remaining_text = text[consumed:]
 
+        # A boundary can still begin inside the trailing run of non-letters once
+        # more text arrives -- "5 PM." needs its following space, '."' its
+        # following word, "。" any closer that comes next. Everything before that
+        # run is settled: a letter there means the lookahead already had its
+        # answer. Set it aside so the next chunk neither rescans nor recopies it,
+        # which is what made streaming quadratic when boundaries were rare.
+        last_letter = LAST_LETTER_RE.search(self.remaining_text)
+        settled_len = last_letter.end() if last_letter else 0
+        file_away = max(0, settled_len - LOOKBEHIND_CONTEXT)
+        if file_away:
+            self.settled_text.append(self.remaining_text[:file_away])
+            self.remaining_text = self.remaining_text[file_away:]
+
+        return sentences
+
     def finish(self) -> str:
-        """End text stream and yield final sentence."""
-        text = (self.current_sentence + self.remaining_text).strip()
+        """End text stream and return the final sentence."""
+        text = (
+            self.current_sentence + "".join(self.settled_text) + self.remaining_text
+        ).strip()
         self.remaining_text = ""
+        self.settled_text = []
         self.current_sentence = ""
         return remove_asterisks(text)
