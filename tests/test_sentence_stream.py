@@ -153,6 +153,189 @@ def test_chinese() -> None:
     ]
 
 
+def test_japanese() -> None:
+    """Test that Japanese punctuation (with corner brackets) works."""
+    text = "「これは最初の文です。」これは二番目の文です。"
+    assert list(stream_to_sentences([text])) == [
+        "「これは最初の文です。」",
+        "これは二番目の文です。",
+    ]
+
+    # Test corner brackets arriving in a later chunk
+    text_chunks = ["「これは最初", "の文です。", "」これは二番目の文です。"]
+    assert list(stream_to_sentences(text_chunks)) == [
+        "「これは最初の文です。」",
+        "これは二番目の文です。",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentences"),
+    (
+        # Full-width enders
+        ("これは何ですか？わかりません。", ["これは何ですか？", "わかりません。"]),
+        ("えっ！？本当ですか？", ["えっ！？", "本当ですか？"]),
+        ("そうですね……わかりました。", ["そうですね……", "わかりました。"]),
+        # Half-width ideographic full stop
+        ("最初の文です｡二番目の文です｡", ["最初の文です｡", "二番目の文です｡"]),
+        # Full-width parentheses as closers
+        ("彼は来た（たぶん）。次の文。", ["彼は来た（たぶん）。", "次の文。"]),
+        # Double angle brackets as closers
+        ("《引用です。》次の文です。", ["《引用です。》", "次の文です。"]),
+    ),
+)
+def test_japanese_enders(text: str, expected_sentences: List[str]) -> None:
+    """Test Japanese enders and closers not covered by the Chinese tests."""
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentences"),
+    (
+        (
+            "「行こう！」と言った。次の文です。",
+            ["「行こう！」と言った。", "次の文です。"],
+        ),
+        ("彼は「はい。」と答えた。終わり。", ["彼は「はい。」と答えた。", "終わり。"]),
+        ("「多分ね」って言ってた。", ["「多分ね」って言ってた。"]),
+        # A *bare* ender followed by と is still a boundary, since sentences do
+        # start with と.
+        ("これです。ところで、次の話。", ["これです。", "ところで、次の話。"]),
+    ),
+)
+def test_japanese_quotative(text: str, expected_sentences: List[str]) -> None:
+    """Test that the quotative particle after a closer doesn't split a sentence."""
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
+@pytest.mark.parametrize(
+    ("language", "text", "expected_sentences"),
+    (
+        (
+            "urdu",
+            "یہ پہلا جملہ ہے۔ یہ دوسرا جملہ ہے۔",
+            ["یہ پہلا جملہ ہے۔", "یہ دوسرا جملہ ہے۔"],
+        ),
+        (
+            "khmer",
+            "នេះជាប្រយោគទីមួយ។ នេះជាប្រយោគទីពីរ។",
+            ["នេះជាប្រយោគទីមួយ។", "នេះជាប្រយោគទីពីរ។"],
+        ),
+        (
+            "khmer-bariyoosan",
+            "នេះជាប្រយោគទីមួយ៕ នេះជាប្រយោគទីពីរ៕",
+            ["នេះជាប្រយោគទីមួយ៕", "នេះជាប្រយោគទីពីរ៕"],
+        ),
+        (
+            "burmese",
+            "ဤသည်ပထမစာကြောင်းဖြစ်သည်။ ဤသည်ဒုတိယဖြစ်သည်။",
+            ["ဤသည်ပထမစာကြောင်းဖြစ်သည်။", "ဤသည်ဒုတိယဖြစ်သည်။"],
+        ),
+        (
+            "tibetan",
+            "འདི་དང་པོ་ཡིན། འདི་གཉིས་པ་ཡིན།",
+            ["འདི་དང་པོ་ཡིན།", "འདི་གཉིས་པ་ཡིན།"],
+        ),
+        (
+            "ethiopic",
+            "ይህ የመጀመሪያው ዓረፍተ ነገር ነው። ይህ ሁለተኛው ነው።",
+            ["ይህ የመጀመሪያው ዓረፍተ ነገር ነው።", "ይህ ሁለተኛው ነው።"],
+        ),
+        (
+            "armenian",
+            "Սա առաջին նախադասությունն է։ Սա երկրորդն է։",
+            ["Սա առաջին նախադասությունն է։", "Սա երկրորդն է։"],
+        ),
+        # Greek written with an ASCII semicolon as the question mark...
+        ("greek", "Τι κάνεις; Είμαι καλά.", ["Τι κάνεις;", "Είμαι καλά."]),
+        # ...and with the "proper" U+037E, which looks identical.
+        ("greek-u037e", "Τι κάνεις; Είμαι καλά.", ["Τι κάνεις;", "Είμαι καλά."]),
+    ),
+)
+def test_script_specific_terminators(
+    language: str, text: str, expected_sentences: List[str]
+) -> None:
+    """Test full stops and question marks outside ASCII and CJK."""
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentences"),
+    (
+        ("I came; I saw; I conquered.", ["I came; I saw; I conquered."]),
+        ("One thing; Another thing; A third.", ["One thing; Another thing; A third."]),
+        ("int x = 1; Foo y = bar; Done.", ["int x = 1; Foo y = bar; Done."]),
+        # Spanish: the semicolons hold, only the period splits.
+        ("Vino; vio; venció. Fin.", ["Vino; vio; venció.", "Fin."]),
+    ),
+)
+def test_semicolon_is_not_a_terminator(
+    text: str, expected_sentences: List[str]
+) -> None:
+    """A semicolon only ends a sentence in Greek, never in a Latin script.
+
+    The Greek question mark is normally typed as an ASCII semicolon, so the
+    boundary is gated on a preceding Greek letter. Without that guard, each of
+    these would split at every semicolon.
+    """
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentences"),
+    (
+        # Spanish inverted marks
+        ("Hola. ¿Cómo estás? Muy bien.", ["Hola.", "¿Cómo estás?", "Muy bien."]),
+        ("Vamos. ¡Qué bien! ¿Y tú?", ["Vamos.", "¡Qué bien!", "¿Y tú?"]),
+        # Leading quotes, straight and curly
+        (
+            'He left. "Hello there." Then silence.',
+            ["He left.", '"Hello there."', "Then silence."],
+        ),
+        (
+            "He left. “Hello there.” Then silence.",
+            ["He left.", "“Hello there.”", "Then silence."],
+        ),
+        (
+            "He left. 'Hello there.' Then silence.",
+            ["He left.", "'Hello there.'", "Then silence."],
+        ),
+        # German „...“ -- the closing “ is English's opening quote
+        ("Er sagte. „Hallo.“ Und dann.", ["Er sagte.", "„Hallo.“", "Und dann."]),
+        # French spaces its guillemets off from the text
+        ("Il a dit. « Bonjour. » Fin.", ["Il a dit.", "« Bonjour. » Fin."]),
+        # Stacked openers
+        ("Wait. «¿Qué pasa?» Nada.", ["Wait.", "«¿Qué pasa?»", "Nada."]),
+    ),
+)
+def test_opening_punctuation(text: str, expected_sentences: List[str]) -> None:
+    """Test that a sentence may begin with punctuation before its first letter."""
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentences"),
+    (
+        # A citation after a quotation is not a new sentence...
+        ('"A quote [...]" (Smith 55).', ['"A quote [...]" (Smith 55).']),
+        # ...nor is a parenthetical aside, so brackets are not openers.
+        ("The result. (See below.)", ["The result. (See below.)"]),
+        ("Use it, e.g. (see docs) for more.", ["Use it, e.g. (see docs) for more."]),
+        # An asterisk is not an opener either, so markdown lists stay intact.
+        ("First. 2. **Item** here.", ["First.", "2. Item here."]),
+        # An opener still requires a following capital.
+        ('He left. "hello there."', ['He left. "hello there."']),
+        # An abbreviation before a quote is still held.
+        ('Mr. "Smith" arrived.', ['Mr. "Smith" arrived.']),
+    ),
+)
+def test_opening_punctuation_non_boundaries(
+    text: str, expected_sentences: List[str]
+) -> None:
+    """Test punctuation that looks like an opener but does not start a sentence."""
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
 def test_quotes() -> None:
     text_chunks = ['"First test sentence', ".", '"', " Second test sentence."]
     assert list(stream_to_sentences(text_chunks)) == [

@@ -6,21 +6,65 @@ import regex as re
 
 from .util import remove_asterisks
 
-SENTENCE_END = r"[.!?…]|[؟]|[।॥]"
+SENTENCE_END = (
+    r"[.!?…]"  # ASCII / Latin
+    r"|[؟۔]"  # Arabic question mark, Urdu full stop
+    r"|[।॥]"  # Devanagari danda, double danda
+    r"|[។៕]"  # Khmer khan, bariyoosan
+    r"|[။]"  # Myanmar section
+    r"|[།༎]"  # Tibetan shad, double shad
+    r"|[።]"  # Ethiopic full stop
+    r"|[։]"  # Armenian full stop
+    r"|[;]"  # Greek question mark
+    # Greek is normally typed with an ASCII semicolon in place of U+037E, so a
+    # semicolon only ends a sentence when it directly follows a Greek letter.
+    # Without that guard every English semicolon would become a boundary.
+    r"|(?<=\p{Greek});"
+)
 ABBREVIATION_RE = re.compile(r"\b\p{Lu}(?:\p{L}{1,2})?\.$", re.UNICODE)
 
 # ASCII / Latin sentence boundaries
-ASCII_CLOSERS = r"['\"\)\]\}\u2019\u201d»]*"  # ' " ) ] } ’ ” »
+#
+# ‘ and “ close a quotation in German („Hallo.“), which is where English
+# opens one -- the same characters therefore appear in ASCII_OPENERS below.
+# Position disambiguates them: a closer sits against the punctuation, an opener
+# comes after whitespace.
+ASCII_CLOSERS = r"['\"\)\]\}\u2018\u2019\u201c\u201d»]*"  # ' " ) ] } ‘ ’ “ ” »
+
+# A sentence may open with punctuation before its first letter: inverted marks
+# (¿Cómo estás?) or quotes ("Hello", «Bonjour», „Hallo“). Openers are matched
+# between the whitespace and the first letter, so they can't be confused with
+# closers -- a quote sitting directly against the preceding punctuation is
+# consumed by ASCII_CLOSERS instead. French sets its guillemets off with a space
+# ("« Bonjour"), hence the whitespace allowed after the opener.
+#
+# Brackets are deliberately absent. They open a sentence ("Done. (See below.)")
+# just as often as they open a parenthetical that continues one, and treating
+# them as openers splits a trailing citation off its quotation. So is ``*``:
+# numbered markdown lists ("2. **Item**") rely on an asterisk not opening a
+# sentence.
+ASCII_OPENERS = r"[¿¡«‹„“‚‘\"']*"  # ¿ ¡ « ‹ „ “ ‚ ‘ " '
 SENTENCE_BOUNDARY_RE = re.compile(
     rf"(?:{SENTENCE_END}+){ASCII_CLOSERS}"
-    rf"(?=\s+[\p{{Lu}}\p{{Lt}}\p{{Lo}}]|(?:\s+\d+[.)]{{1,2}}\s+))",
+    rf"(?=\s+{ASCII_OPENERS}\s*[\p{{Lu}}\p{{Lt}}\p{{Lo}}]"
+    rf"|(?:\s+\d+[.)]{{1,2}}\s+))",
     re.DOTALL,
 )
 
-# Chinese sentence boundaries (enders + trailing closers)
-ZH_CLOSERS = "”’」』）》】〕〉）"
-ZH_ENDERS = "。！？"
-SENTENCE_BOUNDARY_ZH_RE = re.compile(rf"(?:[{ZH_ENDERS}]|……|…)+[{ZH_CLOSERS}]*")
+# CJK sentence boundaries (enders + trailing closers). Chinese and Japanese
+# share the same terminators, so one pattern covers both.
+CJK_CLOSERS = "”’」』｣）》】〕〉〞〟" + r")\]\}\"'»"
+CJK_ENDERS = "。！？｡"
+
+# A closing quote followed by と/って is the Japanese quotative particle, not a
+# sentence break ("「行こう！」と言った。" is one sentence), so refuse the
+# boundary there. The closers are matched possessively and the bare-ender
+# branch requires that no closer follows, otherwise the pattern could backtrack
+# into a shorter match that splits *before* the closer. A bare ender followed by
+# と is still a boundary, since plenty of sentences begin with と ("ところで…").
+SENTENCE_BOUNDARY_CJK_RE = re.compile(
+    rf"(?:[{CJK_ENDERS}]|…)++(?:[{CJK_CLOSERS}]++(?![とっ])|(?![{CJK_CLOSERS}]))"
+)
 
 BLANK_LINES_RE = re.compile(r"(?:\r?\n){2,}")
 
@@ -77,7 +121,7 @@ class SentenceBoundaryDetector:
         # no further match in this buffer, so it is never searched again.
         consumed = 0
         match_blank_lines = BLANK_LINES_RE.search(text, consumed)
-        match_punctuation_zh = SENTENCE_BOUNDARY_ZH_RE.search(text, consumed)
+        match_punctuation_cjk = SENTENCE_BOUNDARY_CJK_RE.search(text, consumed)
         match_punctuation_ascii = SENTENCE_BOUNDARY_RE.search(text, consumed)
 
         while consumed < text_len:
@@ -86,25 +130,25 @@ class SentenceBoundaryDetector:
             if match_blank_lines is not None and match_blank_lines.start() < consumed:
                 match_blank_lines = BLANK_LINES_RE.search(text, consumed)
             if (
-                match_punctuation_zh is not None
-                and match_punctuation_zh.start() < consumed
+                match_punctuation_cjk is not None
+                and match_punctuation_cjk.start() < consumed
             ):
-                match_punctuation_zh = SENTENCE_BOUNDARY_ZH_RE.search(text, consumed)
+                match_punctuation_cjk = SENTENCE_BOUNDARY_CJK_RE.search(text, consumed)
             if (
                 match_punctuation_ascii is not None
                 and match_punctuation_ascii.start() < consumed
             ):
                 match_punctuation_ascii = SENTENCE_BOUNDARY_RE.search(text, consumed)
 
-            # Choose earliest punctuation (Chinese vs ASCII)
-            if match_punctuation_zh and match_punctuation_ascii:
+            # Choose earliest punctuation (CJK vs ASCII)
+            if match_punctuation_cjk and match_punctuation_ascii:
                 match_punctuation = (
-                    match_punctuation_zh
-                    if match_punctuation_zh.start() < match_punctuation_ascii.start()
+                    match_punctuation_cjk
+                    if match_punctuation_cjk.start() < match_punctuation_ascii.start()
                     else match_punctuation_ascii
                 )
             else:
-                match_punctuation = match_punctuation_zh or match_punctuation_ascii
+                match_punctuation = match_punctuation_cjk or match_punctuation_ascii
 
             # Choose earliest boundary overall (blank lines vs punctuation)
             if match_blank_lines and match_punctuation:
@@ -119,10 +163,10 @@ class SentenceBoundaryDetector:
             else:
                 break
 
-            # If this is a Chinese sentence boundary *at the end of the buffer*,
+            # If this is a CJK sentence boundary *at the end of the buffer*,
             # do not consume it yet. Wait for the next chunk so we can pick up
             # any following closers (e.g., ”, 》, ）) and following text.
-            if first_match is match_punctuation_zh and first_match.end() == text_len:
+            if first_match is match_punctuation_cjk and first_match.end() == text_len:
                 break
 
             match_end = first_match.end()

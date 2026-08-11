@@ -19,13 +19,26 @@ def _chunks(text: str, size: int) -> List[str]:
     return [text[i : i + size] for i in range(0, len(text), size)]
 
 
-# Representative texts exercising ASCII, Chinese, blank-line, and markdown paths.
+# Representative texts exercising ASCII, Chinese, Japanese, blank-line, and
+# markdown paths.
 INVARIANCE_TEXTS = [text for _, text, _ in GOLDEN_EN_RULES] + [
     "Hello World. My name is Jonas.",
     "“这是第一句话。”这是第二句话。",
     "Test sentence 1\n\nTest sentence 2. Test sentence 3",
     "**Bold** text! Another *emphasized* word. Done.",
     "Mixed 中文 and English. 这是中文。Back to English.",
+    "「これは最初の文です。」これは二番目の文です。",
+    "「行こう！」と言った。それから出発した。",
+    "えっ！？本当ですか？そうですね……はい。",
+    "Mixed 日本語 and English. これは日本語です。Back to English.",
+    "Τι κάνεις; Είμαι καλά. Χαίρω πολύ.",
+    "I came; I saw; I conquered. Then I left.",
+    "یہ پہلا جملہ ہے۔ یہ دوسرا جملہ ہے۔",
+    "Սա առաջին նախադասությունն է։ Սա երկրորդն է։",
+    "Hola. ¿Cómo estás? ¡Muy bien!",
+    'He left. "Hello there." Then silence.',
+    "Er sagte. „Hallo.“ Und dann.",
+    "The result. (See below.) Done.",
 ]
 
 
