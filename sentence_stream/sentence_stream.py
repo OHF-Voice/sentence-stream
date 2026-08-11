@@ -22,7 +22,34 @@ SENTENCE_END = (
     # Without that guard every English semicolon would become a boundary.
     r"|(?<=\p{Greek});"
 )
-ABBREVIATION_RE = re.compile(r"\b\p{Lu}(?:\p{L}{1,2})?\.$", re.UNICODE)
+# Words that routinely take a period without ending a sentence. Matched
+# case-insensitively. Kept deliberately short: every entry here is a sentence
+# that will not be split, so a wrong guess costs more than a missing one.
+ABBREVIATIONS = (
+    "adm al approx capt cf col comdr cpl dept dr eg est et etc fig gen gov hon "
+    "ie jr lt maj messrs mr mrs ms mt mx op p pp prof pvt rep rev sen sgt sr st "
+    "sup supt viz vol vs"
+).split()
+
+# A trailing token that ends in a period but not the sentence: a single initial
+# ("Jonas E. Smith"), a dotted acronym ("U.S.", "a.m."), or one of the above.
+#
+# It used to be any capitalized word of three letters or fewer, which held every
+# sentence ending in a short capitalized word -- "Turn on the TV. Then sit down."
+# came out as one sentence, as did anything ending in NY., IBM. or No.
+ABBREVIATION_RE = re.compile(
+    r"\b(?:"
+    r"\p{Lu}"  # single initial
+    r"|(?:\p{L}\.)+\p{L}"  # dotted acronym
+    rf"|(?i:{'|'.join(ABBREVIATIONS)})"  # known abbreviation
+    r")\.$",
+    re.UNICODE,
+)
+
+# How much of the tail to test against ABBREVIATION_RE. Must comfortably exceed
+# the longest token above so that \b still sees a real preceding character
+# instead of the start of the slice.
+ABBREVIATION_WINDOW = 20
 
 # ASCII / Latin sentence boundaries
 #
@@ -46,8 +73,15 @@ ASCII_CLOSERS = r"['\"\)\]\}\u2018\u2019\u201c\u201d»]*"  # ' " ) ] } ‘ ’ �
 # sentence.
 ASCII_OPENERS = r"[¿¡«‹„“‚‘\"']*"  # ¿ ¡ « ‹ „ “ ‚ ‘ " '
 SENTENCE_BOUNDARY_RE = re.compile(
-    rf"(?:{SENTENCE_END}+){ASCII_CLOSERS}"
-    rf"(?=\s+{ASCII_OPENERS}\s*[\p{{Lu}}\p{{Lt}}\p{{Lo}}]"
+    # The inner group matters: SENTENCE_END is an alternation, so without it the
+    # + would bind to the last branch alone instead of to any terminator.
+    rf"(?:(?:{SENTENCE_END})+){ASCII_CLOSERS}"
+    # The gap after an opener excludes newlines. An opener belongs to the
+    # sentence that follows it on the same line, and letting the lookahead reach
+    # over a blank line disagreed with the blank-line rule about where the
+    # opener goes -- which showed up as the split moving when the text was
+    # chunked, since a blank line is acted on as soon as it arrives.
+    rf"(?=\s+{ASCII_OPENERS}[^\S\n]*[\p{{Lu}}\p{{Lt}}\p{{Lo}}]"
     rf"|(?:\s+\d+[.)]{{1,2}}\s+))",
     re.DOTALL,
 )
@@ -79,6 +113,7 @@ BLANK_LINES_RE = re.compile(r"(?:\r?\n){2,}")
 # length of the buffer; scanning forwards for the run would reintroduce the very
 # per-chunk buffer walk this exists to avoid.
 LAST_LETTER_RE = re.compile(r"\p{L}", re.REVERSE)
+LETTER_RE = re.compile(r"\p{L}")
 
 # How much settled text to keep in front of the undecided tail. A pattern with a
 # lookbehind -- the Greek question mark needs the letter before it -- would stop
@@ -188,10 +223,15 @@ class SentenceBoundaryDetector:
             else:
                 break
 
-            # If this is a CJK sentence boundary *at the end of the buffer*,
-            # do not consume it yet. Wait for the next chunk so we can pick up
-            # any following closers (e.g., ”, 》, ）) and following text.
-            if first_match is match_punctuation_cjk and first_match.end() == text_len:
+            # Don't commit a CJK boundary while no letter follows it. More text
+            # could still add a closer (”, 》, ）) or complete a competing ASCII
+            # match that reaches further -- "…" is an ender for both patterns, and
+            # the ASCII one also takes closers the CJK one doesn't, so committing
+            # early split "Wait…“ Yes." before the quote when it arrived in a
+            # later chunk. A letter means every interpretation has its answer.
+            if first_match is match_punctuation_cjk and not LETTER_RE.search(
+                text, first_match.end()
+            ):
                 break
 
             match_end = first_match.end()
@@ -209,7 +249,7 @@ class SentenceBoundaryDetector:
                 # ends in a possible abbreviation, so keep accumulating until
                 # the flush check below proves otherwise.
                 self.current_sentence += match_text
-            elif ABBREVIATION_RE.search(match_text[-5:]):
+            elif ABBREVIATION_RE.search(match_text[-ABBREVIATION_WINDOW:]):
                 # We can't know yet if this is a sentence boundary or an abbreviation
                 self.current_sentence = match_text
             elif output_text := remove_asterisks(match_text.strip()):
@@ -217,7 +257,7 @@ class SentenceBoundaryDetector:
 
             # If the current sentence no longer looks like an abbreviation, flush it.
             if self.current_sentence and not ABBREVIATION_RE.search(
-                self.current_sentence[-5:]
+                self.current_sentence[-ABBREVIATION_WINDOW:]
             ):
                 if output_text := remove_asterisks(self.current_sentence.strip()):
                     sentences.append(output_text)

@@ -1,5 +1,6 @@
 """Tests for streaming behavior: chunk-invariance, edge cases, and performance."""
 
+import random
 import time
 from typing import List
 
@@ -39,6 +40,8 @@ INVARIANCE_TEXTS = [text for _, text, _ in GOLDEN_EN_RULES] + [
     'He left. "Hello there." Then silence.',
     "Er sagte. „Hallo.“ Und dann.",
     "The result. (See below.) Done.",
+    "Wait…“ Yes it is.",
+    "։ ¡\n\nと….",
 ]
 
 
@@ -73,11 +76,13 @@ def test_whitespace_only_chunks() -> None:
 
 def test_no_input() -> None:
     """An empty stream yields nothing."""
+    # pylint: disable=use-implicit-booleaness-not-comparison
     assert list(stream_to_sentences([])) == []
 
 
 def test_only_whitespace() -> None:
     """Whitespace-only input yields nothing."""
+    # pylint: disable=use-implicit-booleaness-not-comparison
     assert list(stream_to_sentences(["   \n  "])) == []
 
 
@@ -128,6 +133,50 @@ def test_detector_reusable_after_finish() -> None:
 
     second = list(detector.add_chunk("Three. Four")) + [detector.finish()]
     assert second == ["Three.", "Four"]
+
+
+# Fragments spanning every code path: Latin, CJK, script terminators, quotes and
+# inverted marks, markdown, blank lines, abbreviations and list numbering.
+_FUZZ_PIECES = (
+    list("abcdefgHIJK ")
+    + [".", "!", "?", "…", "。", "！", "？", "、", ",", ";", "\n", "\n\n", "  "]
+    + ['"', "'", "“", "”", "„", "«", "»", "¿", "¡", "「", "」", "（", "）"]
+    + ["*", "**", "と", "って", "あ", "中", "文"]
+    + ["؟", "।", "۔", "។", "།", "።", "։", "Α", "α", "ς"]
+    + ["(", ")", "Mr.", "U.S.", "TV.", "5", "2."]
+)
+
+
+def _normalized(text: str) -> str:
+    """Strip everything the splitter is allowed to drop: whitespace and markup."""
+    return "".join(text.split()).replace("*", "")
+
+
+@pytest.mark.parametrize("seed", (1, 7, 42, 1234))
+def test_fuzz_chunk_invariance_and_preservation(seed: int) -> None:
+    """Random texts must split the same however they are chunked, losing nothing.
+
+    Both properties are load-bearing and neither is obvious from the patterns:
+    this is what caught a CJK boundary committing before a competing ASCII match
+    could complete, and an opener whose lookahead reached over a blank line.
+    """
+    rng = random.Random(seed)
+    for _ in range(500):
+        text = "".join(rng.choice(_FUZZ_PIECES) for _ in range(rng.randint(1, 30)))
+        one_shot = list(stream_to_sentences([text]))
+
+        chunkings = [list(text), _chunks(text, 3)]
+        if len(text) > 1:
+            split_at = rng.randint(1, len(text) - 1)
+            chunkings.append([text[:split_at], text[split_at:]])
+        for chunking in chunkings:
+            assert (
+                list(stream_to_sentences(chunking)) == one_shot
+            ), f"chunking changed the split of {text!r}"
+
+        assert _normalized("".join(one_shot)) == _normalized(
+            text
+        ), f"text lost or duplicated for {text!r}"
 
 
 def test_add_chunk_is_eager() -> None:

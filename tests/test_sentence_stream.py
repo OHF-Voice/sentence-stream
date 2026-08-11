@@ -6,7 +6,7 @@ import pytest
 
 from sentence_stream import async_stream_to_sentences, stream_to_sentences
 
-from .english_golden_rules import GOLDEN_EN_RULES
+from .english_golden_rules import GOLDEN_EN_RULES, KNOWN_DEVIATIONS
 
 
 @pytest.mark.asyncio
@@ -123,9 +123,58 @@ def test_golden_rules_en(
     actual_sentences = list(stream_to_sentences([text]))
     if should_pass:
         assert expected_sentences == actual_sentences
-    else:
-        # Expected to fail
-        assert expected_sentences != actual_sentences, "Expected to fail but succeeded"
+        return
+
+    # A known deviation. Assert the output we actually produce rather than just
+    # that it differs from pySBD, which would hold for any wrong answer -- if a
+    # change fixes one of these, this fails and the rule gets promoted to
+    # should_pass=True.
+    assert actual_sentences == KNOWN_DEVIATIONS[text]
+    assert actual_sentences != expected_sentences, "Expected to fail but succeeded"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentences"),
+    (
+        ("Turn on the TV. Then sit down.", ["Turn on the TV.", "Then sit down."]),
+        ("I love NY. It's a great city.", ["I love NY.", "It's a great city."]),
+        ("Meet me at 5 PM. Then we go.", ["Meet me at 5 PM.", "Then we go."]),
+        (
+            "He works at IBM. She works at HP.",
+            ["He works at IBM.", "She works at HP."],
+        ),
+        ("The answer is No. Try again.", ["The answer is No.", "Try again."]),
+        ("One. Two. Three.", ["One.", "Two.", "Three."]),
+    ),
+)
+def test_short_capitalized_word_is_not_an_abbreviation(
+    text: str, expected_sentences: List[str]
+) -> None:
+    """A short capitalized word at the end of a sentence still ends it.
+
+    The abbreviation test used to be any capitalized word of three letters or
+    fewer, so every one of these came out as a single sentence.
+    """
+    assert list(stream_to_sentences([text])) == expected_sentences
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        # A single initial.
+        "My name is Jonas E. Smith.",
+        # Known abbreviations, followed by a capital.
+        "I can see Mt. Fuji from here.",
+        "St. Michael's Church is on 5th st. near the light.",
+        "Please ask Dr. Smith about it.",
+        # A dotted acronym.
+        "I work for the U.S. Government in Virginia.",
+        "At 5 a.m. Mr. Smith went to the bank.",
+    ),
+)
+def test_abbreviations_still_hold(text: str) -> None:
+    """An abbreviation before a capitalized word must not end the sentence."""
+    assert list(stream_to_sentences([text])) == [text]
 
 
 def test_short_word_at_boundary() -> None:

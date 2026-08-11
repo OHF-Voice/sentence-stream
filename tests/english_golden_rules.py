@@ -3,6 +3,8 @@
 See: https://github.com/nipunsadvilkar/pySBD
 """
 
+from typing import Dict, List
+
 # NOTE: Added boolean to indiciate if rule is expected to pass (True) or fail.
 
 GOLDEN_EN_RULES = [
@@ -36,7 +38,7 @@ GOLDEN_EN_RULES = [
     ),
     # 9) Two letter upper case abbreviations at the end of a sentence
     (
-        False,
+        True,
         "They closed the deal with Pitt, Briggs & Co. It closed yesterday.",
         ["They closed the deal with Pitt, Briggs & Co.", "It closed yesterday."],
     ),
@@ -263,3 +265,66 @@ GOLDEN_EN_RULES = [
         ],
     ),
 ]
+
+
+# What we actually produce for the rules marked above as expected-to-fail.
+# Pinned so that a change in behaviour shows up as a failing test: asserting
+# only that the output differs from pySBD would pass for any wrong answer.
+KNOWN_DEVIATIONS: Dict[str, List[str]] = {
+    "I live in the E.U. How about you?": ["I live in the E.U. How about you?"],
+    "I live in the U.S. How about you?": ["I live in the U.S. How about you?"],
+    "At 5 a.m. Mr. Smith went to the bank. He left the bank at 6 P.M. Mr. Smith then went to the store.": [
+        "At 5 a.m. Mr. Smith went to the bank.",
+        "He left the bank at 6 P.M. Mr. Smith then went to the store.",
+    ],
+    "1.) The first item 2.) The second item": [
+        "1.)",
+        "The first item 2.)",
+        "The second item",
+    ],
+    "1.) The first item. 2.) The second item.": [
+        "1.)",
+        "The first item.",
+        "2.)",
+        "The second item.",
+    ],
+    "1) The first item 2) The second item": ["1) The first item 2) The second item"],
+    "1. The first item 2. The second item": [
+        "1.",
+        "The first item 2.",
+        "The second item",
+    ],
+    "1. The first item. 2. The second item.": [
+        "1.",
+        "The first item.",
+        "2.",
+        "The second item.",
+    ],
+    "• 9. The first item • 10. The second item": [
+        "• 9.",
+        "The first item • 10.",
+        "The second item",
+    ],
+    "⁃9. The first item ⁃10. The second item": [
+        "⁃9.",
+        "The first item ⁃10.",
+        "The second item",
+    ],
+    "a. The first item b. The second item c. The third list item": [
+        "a.",
+        "The first item b.",
+        "The second item c.",
+        "The third list item",
+    ],
+    "We make a good team, you and I. Did you see Albert I. Jones yesterday?": [
+        "We make a good team, you and I. Did you see Albert I. Jones yesterday?"
+    ],
+    "I wasn’t really ... well, what I mean...see . . . what I'm saying, the thing is . . . I didn’t mean it.": [
+        "I wasn’t really ... well, what I mean...see . . . what I'm saying, the thing is . . .",
+        "I didn’t mean it.",
+    ],
+    "One further habit which was somewhat weakened . . . was that of combining words into self-interpreting compounds. . . . The practice was not abandoned. . . .": [
+        "One further habit which was somewhat weakened . . . was that of combining words into self-interpreting compounds. . . .",
+        "The practice was not abandoned. . . .",
+    ],
+}
