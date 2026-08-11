@@ -26,6 +26,9 @@ Fixes:
 - Markdown stripping leaves text that only resembles markup alone:
   "2*3*4 = 24." was being rewritten to "234 = 24."
 - Removing a bullet's asterisks no longer swallows a preceding blank line
+- `stream_to_sentences` accepts a single complete string. A `str` is itself an
+  `Iterable[str]`, so passing one used to type-check and work while quietly
+  streaming a character at a time
 
 ## 1.3.0
 

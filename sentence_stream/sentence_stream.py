@@ -1,7 +1,7 @@
 """Guess the sentence boundaries in a text stream."""
 
 from collections.abc import AsyncGenerator, AsyncIterable, Generator, Iterable
-from typing import List
+from typing import List, Union
 
 import regex as re
 
@@ -82,8 +82,7 @@ SENTENCE_BOUNDARY_RE = re.compile(
     # opener goes -- which showed up as the split moving when the text was
     # chunked, since a blank line is acted on as soon as it arrives.
     rf"(?=\s+{ASCII_OPENERS}[^\S\n]*[\p{{Lu}}\p{{Lt}}\p{{Lo}}]"
-    rf"|(?:\s+\d+[.)]{{1,2}}\s+))",
-    re.DOTALL,
+    rf"|(?:\s+\d+[.)]{{1,2}}\s+))"
 )
 
 # CJK sentence boundaries (enders + trailing closers). Chinese and Japanese
@@ -125,8 +124,19 @@ LOOKBEHIND_CONTEXT = 8
 # -----------------------------------------------------------------------------
 
 
-def stream_to_sentences(text_stream: Iterable[str]) -> Generator[str, None, None]:
-    """Generate sentences from a text stream."""
+def stream_to_sentences(
+    text_stream: Union[str, Iterable[str]]
+) -> Generator[str, None, None]:
+    """Generate sentences from a text stream.
+
+    A single complete string is accepted as well as a stream of chunks. Iterating
+    a str yields one character at a time, which produces the same sentences --
+    the result never depends on where chunks begin and end -- but does far more
+    work than handing the whole thing over at once.
+    """
+    if isinstance(text_stream, str):
+        text_stream = [text_stream]
+
     boundary_detector = SentenceBoundaryDetector()
 
     for text_chunk in text_stream:

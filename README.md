@@ -38,7 +38,9 @@ assert list(stream_to_sentences(text_chunks)) == [
 ```
 
 Where the chunk boundaries fall never changes the result: the same text split
-into different chunks always produces the same sentences.
+into different chunks always produces the same sentences. A single complete
+string works too — `stream_to_sentences("First sentence. Second sentence.")` —
+for when there is nothing to stream.
 
 For async streams, use `async_stream_to_sentences`:
 

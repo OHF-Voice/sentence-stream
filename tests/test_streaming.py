@@ -6,11 +6,9 @@ from typing import List
 
 import pytest
 
-from sentence_stream import (
-    SentenceBoundaryDetector,
-    async_stream_to_sentences,
-    stream_to_sentences,
-)
+from sentence_stream import SentenceBoundaryDetector, async_stream_to_sentences
+from sentence_stream import sentence_stream as sentence_stream_module
+from sentence_stream import stream_to_sentences
 
 from .english_golden_rules import GOLDEN_EN_RULES
 
@@ -60,6 +58,39 @@ def test_chunk_invariance_char_by_char(text: str) -> None:
     one_shot = list(stream_to_sentences([text]))
     streamed = list(stream_to_sentences(list(text)))
     assert streamed == one_shot
+
+
+@pytest.mark.parametrize("text", INVARIANCE_TEXTS)
+def test_bare_string_matches_single_chunk(text: str) -> None:
+    """A whole string is accepted, and means one chunk rather than one per character.
+
+    A str is itself an Iterable[str], so passing one used to type-check and work
+    while quietly streaming character by character.
+    """
+    assert list(stream_to_sentences(text)) == list(stream_to_sentences([text]))
+
+
+def test_bare_string_is_not_iterated_per_character(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole string reaches the detector in one go, not a character at a time."""
+    seen: List[str] = []
+
+    class Recorder(SentenceBoundaryDetector):
+        """Records the chunks it is handed."""
+
+        def add_chunk(self, chunk: str) -> List[str]:
+            seen.append(chunk)
+            return super().add_chunk(chunk)
+
+    monkeypatch.setattr(sentence_stream_module, "SentenceBoundaryDetector", Recorder)
+
+    text = "Hello world. Goodbye world."
+    assert list(sentence_stream_module.stream_to_sentences(text)) == [
+        "Hello world.",
+        "Goodbye world.",
+    ]
+    assert seen == [text]
 
 
 def test_empty_chunks_ignored() -> None:
